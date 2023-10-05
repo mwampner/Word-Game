@@ -10,6 +10,11 @@
 
 struct sockaddr_in server_addr;
 
+typedef struct{
+    int c_sock;
+    char * c_user;
+}clients;
+
 // function to get and bind socket
 int get_socket(int port) {
     int socket_FD = socket(AF_INET, SOCK_STREAM, 0);
@@ -20,6 +25,9 @@ int get_socket(int port) {
     }
     return socket_FD;
 }
+
+// handle guess
+
 
 int main(int argc, char** argv) {
     // take in and parse input
@@ -33,7 +41,6 @@ int main(int argc, char** argv) {
     int seed = atoi(argv[1]);
     int port= atoi(argv[2]);
     int longest = atoi(argv[4]);
-    srand(seed);
 
     // Error check input
     if(longest < 0 || longest > 1024){
@@ -73,21 +80,62 @@ int main(int argc, char** argv) {
         }
         dict[i][j] = '\0';
     }
+    srand(seed);
 
     // Set up server
+    int server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_socket == -1) {
+        perror("Socket error");
+        exit(1);
+    }
+
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    int num_connect = 0;
+    server_addr.sin_port = htons(port);
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+
+    if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
+        perror("bind failed");
+        close(server_socket);
+        exit(1);
+    }
+
+    if (listen(server_socket, 1) == -1) {
+        perror("failed");
+        close(server_socket);
+        exit(1);
+    }
     fd_set readfd, ready;
     FD_ZERO(&readfd);
     FD_SET(STDIN_FILENO, &readfd);
 
-    int client_sockets[5]; 
-    char * client_users[5]; 
+    //int client_sockets[5]; 
+    //char * client_users[5]; 
+    clients * client = malloc(5 * sizeof(clients));
+    for(int i = 0; i < 5; i++){
+        client[i].c_sock = -1;
+    }
+
+    // get random word
+    int t = rand() % file_size;
+    char * word = malloc(longest * sizeof(char));
+    memcpy(word, dict[t], strlen(dict[t]));
+    word[strlen(dict[t])] = '\0';
+    int num_connect = 0; 
 
     // start word game
     while (1) {
         ready = readfd;
+        
+        // Check for disconnection
+        if(num_connect != 0){
+            for(int i = 0; i < 5; i++){
+                
+            }
+        }
+
+        // Ready for guesses
         select(FD_SETSIZE, &ready, NULL, NULL, NULL);
 
         for (int i = 0; i < FD_SETSIZE; i++) {
@@ -104,8 +152,13 @@ int main(int argc, char** argv) {
                             exit(EXIT_FAILURE);
                         }
                         FD_SET(socket_FD, &readfd);
-                        client_sockets[num_connect] = socket_FD;
-                        num_connect++;
+                        //find empty spot in clients struct
+                        for(int i = 0; i < 5; i++){
+                            if(client[i].c_sock == -1){
+                                client[num_connect].c_sock = socket_FD;
+                                num_connect++;
+                            }
+                        }
                     }
                 } else { // handle guess
                     char message[512];
