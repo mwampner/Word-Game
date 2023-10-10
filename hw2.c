@@ -27,7 +27,52 @@ int get_socket(int port) {
 }
 
 // handle guess
+char * handle_guess(char * g, char * a){
+    // declare variables
+    char * response = malloc(2 * sizeof(int));
+    char * answer = malloc(strlen(a));
+    char * guess = malloc(strlen(g));
+    memcpy(answer, a, strlen(a));
+    memcpy(guess, g, strlen(g));
+    int correct = 0;
+    int wrong_place = 0;
 
+    // Validate guess word has correct length
+    if(strlen(guess) != strlen(answer)){
+        response[0] = 'x';
+    }
+    else{ // Check letters
+        // check for correct letter and placement
+        for(int i = 0; i < strlen(answer); i++){
+            if(guess[i] == answer[i]){
+                answer[i] = '0';
+                guess[i] = '0';
+                correct++;
+            }
+        }
+
+        // check for correct letter and wrong placement
+        for(int i = 0; i < strlen(guess); i++){
+            if(guess[i] != '0'){
+                for(int j = 0; j < strlen(answer); j++){
+                    if(answer[j] != '0'){
+                        if(guess[i] == answer[j]){
+                            guess[i] = '0';
+                            answer[j] = '0';
+                            wrong_place++;
+                        }
+                    }
+                }
+            }
+        }
+
+        // build response 
+        memcpy(response, &correct, sizeof(int));
+        memcpy(response+4, &wrong_place, sizeof(int));
+    }
+
+    return response;
+}
 
 int main(int argc, char** argv) {
     // take in and parse input
