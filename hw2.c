@@ -7,6 +7,7 @@
 #include <sys/time.h>
 #include <signal.h>
 #include <arpa/inet.h>
+#include <stdbool.h>
 
 struct sockaddr_in server_addr;
 
@@ -45,8 +46,6 @@ char * handle_guess(char * g, char * a){
         // check for correct letter and placement
         for(int i = 0; i < strlen(answer); i++){
             if(guess[i] == answer[i]){
-                answer[i] = '0';
-                guess[i] = '0';
                 correct++;
             }
         }
@@ -57,7 +56,6 @@ char * handle_guess(char * g, char * a){
                 for(int j = 0; j < strlen(answer); j++){
                     if(answer[j] != '0'){
                         if(guess[i] == answer[j]){
-                            guess[i] = '0';
                             answer[j] = '0';
                             wrong_place++;
                         }
@@ -72,6 +70,19 @@ char * handle_guess(char * g, char * a){
     }
 
     return response;
+}
+
+// handle username
+bool handle_user(char * new_user, char ** user_list, int num_users){
+    // Check if username is being used
+    for(int i = 0; i < num_users; i ++){
+        if(tolower(new_user) == tolower(user_list[i])){
+            return false;
+        }
+    }
+
+    // indicates valid username
+    return true;
 }
 
 int main(int argc, char** argv) {
