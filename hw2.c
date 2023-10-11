@@ -182,41 +182,48 @@ int main(int argc, char** argv) {
 
     // start word game
     while (1) {
+        //printf("Game Started\n");
         ready = readfd;
         
         // Check for disconnection
-        if(num_connect != 0){
-            for(int i = 0; i < 5; i++){
+        // if(num_connect != 0){
+        //     for(int i = 0; i < 5; i++){
                 
-            }
-        }
+        //     }
+        // }
 
         // Ready for guesses
+        FD_SET(server_socket, &ready);
         select(FD_SETSIZE, &ready, NULL, NULL, NULL);
+
+        //printf("ready for guesses\n");
 
         for (int i = 0; i < FD_SETSIZE; i++) {
             if (FD_ISSET(i, &ready)) {
-                // get new connection
-                if (i == STDIN_FILENO) {
-                    int newport = 0;
-                    scanf("%d", &newport);
-                    if (num_connect < 5) {
-                        int socket_FD = get_socket(port);
-                        server_addr.sin_port = htons(newport);
-                        if (connect(socket_FD, (struct sockaddr*)&server_addr, sizeof(server_addr))) {
-                            perror("Unable to connect");
-                            exit(EXIT_FAILURE);
-                        }
-                        FD_SET(socket_FD, &readfd);
-                        //find empty spot in clients struct
-                        for(int i = 0; i < 5; i++){
-                            if(client[i].c_sock == -1){
-                                client[num_connect].c_sock = socket_FD;
-                                num_connect++;
-                            }
-                        }
+            // Check for new connection
+            if (i == server_socket) {
+                struct sockaddr_in client_addr;
+                socklen_t client_len = sizeof(client_addr);
+                int new_client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_len);
+                if (new_client_socket == -1) {
+                    perror("accept failed");
+                    continue;
+                }
+
+                // Add the new client socket to the set of file descriptors to monitor
+                FD_SET(new_client_socket, &readfd);
+                
+                //find empty spot in clients struct
+                for(int j = 0; j < 5; j++){
+                    if(client[j].c_sock == -1){
+                        client[j].c_sock = new_client_socket;
+                        num_connect++;
+                        break;
                     }
-                } else { // handle guess
+                }
+
+                printf("New client connected on socket %d\n", new_client_socket);
+            } else { // handle guess
                     char message[512];
                     memset(message, 0, 512);
                     int amount = read(i, message, 512);
