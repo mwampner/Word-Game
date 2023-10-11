@@ -82,7 +82,7 @@ bool handle_user(char * new_user, char ** user_list, int num_users, int len){
                 if(tolower(new_user[j]) != tolower(user_list[i][j])){
                     j = len;
                 }
-                if(j = len-1){
+                if(j == len-1){
                     return false;
                 }
             }
@@ -113,11 +113,11 @@ int main(int argc, char** argv) {
     }
 
     // Read in dictionary file
-    FILE * fp = fopen(*(argv+3), "r");
+    FILE * fp;
+    fp = fopen(argv[3], "r");
 
     if(!fp){
-        printf("%s\n", *(argv+3));
-        fprintf(stderr, "ERROR: Invalid argument(s)\nUSAGE: hw4.out <listener-port> <seed> <word-filename> <num-words>");
+        fprintf(stderr, "ERROR: File %s not found\n", argv[3]);
         return EXIT_FAILURE;
     }
     int file_size;
@@ -127,23 +127,14 @@ int main(int argc, char** argv) {
 
     // Read in words
     char** dict = malloc(file_size * sizeof(char*));
-    for(int i = 0; i < file_size; i++){
-        dict[i] = malloc(longest * sizeof(char));
-    }
 
     char *x = malloc(longest * sizeof(char));
     int y = 0;
     while (fscanf(fp, "%s\n", x) == 1) {
-        memcpy(dict[y], x, longest);
+        dict[y] = malloc(strlen(x));
+        memcpy(dict[y], x, strlen(x));
     }
 
-    for(int i = 0; i < file_size; i++){
-        int j = 0;
-        while(dict[i][j]){
-            j++;
-        }
-        dict[i][j] = '\0';
-    }
     srand(seed);
 
     // Set up server
@@ -184,9 +175,9 @@ int main(int argc, char** argv) {
 
     // get random word
     int t = rand() % file_size;
+    printf("Word: %s /// Length: %d\n", dict[t], strlen(dict[t]));
     char * word = malloc(longest * sizeof(char));
     memcpy(word, dict[t], strlen(dict[t]));
-    word[strlen(dict[t])] = '\0';
     int num_connect = 0; 
 
     // start word game
