@@ -8,6 +8,7 @@
 #include <signal.h>
 #include <arpa/inet.h>
 #include <stdbool.h>
+#include <ctype.h>
 
 struct sockaddr_in server_addr;
 
@@ -73,11 +74,18 @@ char * handle_guess(char * g, char * a){
 }
 
 // handle username
-bool handle_user(char * new_user, char ** user_list, int num_users){
+bool handle_user(char * new_user, char ** user_list, int num_users, int len){
     // Check if username is being used
     for(int i = 0; i < num_users; i ++){
-        if(tolower(new_user) == tolower(user_list[i])){
-            return false;
+        if(len == strlen(user_list[i])){
+            for(int j = 0; j < len; j++){
+                if(tolower(new_user[j]) != tolower(user_list[i][j])){
+                    j = len;
+                }
+                if(j = len-1){
+                    return false;
+                }
+            }
         }
     }
 
@@ -169,6 +177,7 @@ int main(int argc, char** argv) {
     //int client_sockets[5]; 
     //char * client_users[5]; 
     clients * client = malloc(5 * sizeof(clients));
+    char ** user_list = malloc(5*sizeof(char*));
     for(int i = 0; i < 5; i++){
         client[i].c_sock = -1;
     }
@@ -182,48 +191,102 @@ int main(int argc, char** argv) {
 
     // start word game
     while (1) {
-        //printf("Game Started\n");
         ready = readfd;
         
         // Check for disconnection
-        // if(num_connect != 0){
-        //     for(int i = 0; i < 5; i++){
+        if(num_connect != 0){
+            for(int i = 0; i < 5; i++){
                 
-        //     }
-        // }
+            }
+        }
 
         // Ready for guesses
-        FD_SET(server_socket, &ready);
         select(FD_SETSIZE, &ready, NULL, NULL, NULL);
-
-        //printf("ready for guesses\n");
-
+        int newsd;
         for (int i = 0; i < FD_SETSIZE; i++) {
             if (FD_ISSET(i, &ready)) {
-            // Check for new connection
-            if (i == server_socket) {
-                struct sockaddr_in client_addr;
-                socklen_t client_len = sizeof(client_addr);
-                int new_client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_len);
-                if (new_client_socket == -1) {
-                    perror("accept failed");
-                    continue;
-                }
+                // get new connection
+                if (i == STDIN_FILENO) {
+                    int newport = 0;
+                    scanf("%d", &newport);
+                    if (num_connect < 5) {
 
-                // Add the new client socket to the set of file descriptors to monitor
-                FD_SET(new_client_socket, &readfd);
-                
-                //find empty spot in clients struct
-                for(int j = 0; j < 5; j++){
-                    if(client[j].c_sock == -1){
-                        client[j].c_sock = new_client_socket;
-                        num_connect++;
-                        break;
+                        // Accept client connection
+                        struct sockaddr_in remote_client;
+                        int addrlen = sizeof( remote_client );
+                        newsd = accept(server_socket, (struct sockaddr *)&remote_client,
+                        (socklen_t *)&addrlen );
+                        if ( newsd == -1 ) { break; }
+                        /*int socket_FD = get_socket(port);
+                        server_addr.sin_port = htons(newport);
+                        if (connect(socket_FD, (struct sockaddr*)&server_addr, sizeof(server_addr))) {
+                            perror("Unable to connect");
+                            exit(EXIT_FAILURE);
+                        }*/
+                        FD_SET(newsd, &readfd);
+                        //find empty spot in clients struct
+                        for(int i = 0; i < 5; i++){
+                            if(client[i].c_sock == -1){
+                                client[i].c_sock = newsd;
+                                num_connect++;
+                            }
+                        }
                     }
-                }
 
-                printf("New client connected on socket %d\n", new_client_socket);
-            } else { // handle guess
+                    // get username
+                    char * user = malloc(512);
+                    int user_len;
+                    int n = send( newsd, "Welcome to Guess the Word, please enter your username.\0", 55, 0 );
+                    if ( n == -1 ) { perror( "send() failed" ); }
+
+                    // receive potential username
+                    bool unused;
+                    n = recv( newsd, user, 512, 0 );
+                    if(n == 0 || n == -1){// disconnect client
+                        for(int i = 0; i < 5; i++){
+                            if(newsd == client[i].c_sock){
+                                client[i].c_sock = -1;
+                                num_connect--;
+                            }
+                        }
+                    }
+                    else{
+                        user_len = n;
+                        user[user_len] = '\0';
+                        // check for valid username
+                        unused = handle_user(user, user_list, num_connect, user_len);
+                    }
+                    // prompt for username until valid
+                    while(!unused){
+                        // build new packet
+                        char * packet = malloc(62 + strlen(user));
+                        memcpy(packet, "Username ", 9);
+                        memcpy(packet+9, user, strlen(user));
+                        // prompt for new user
+                        memcpy(packet+9+strlen(user), " is already taken, please enter a different username\0", 53);
+                        n = send( newsd, packet,  62+strlen(user), 0 );
+                        free(user);
+                        user = malloc(512);
+                        // receive new user
+                        n = recv( newsd, user, 512, 0 );
+                        if(n == 0 || n == -1){// disconnect client
+                            for(int i = 0; i < 5; i++){
+                                if(newsd == client[i].c_sock){
+                                    client[i].c_sock = -1;
+                                    num_connect--;
+                                }
+                            }
+                            break;
+                        }
+                        else{
+                            user_len = n;
+                            user[user_len] = '\0';
+                            // check for valid username
+                            unused = handle_user(user, user_list, num_connect, user_len);
+                        }
+                    }
+
+                } else { // handle guess
                     char message[512];
                     memset(message, 0, 512);
                     int amount = read(i, message, 512);
