@@ -52,8 +52,8 @@ char * handle_guess(char * g, char * a, int a_len){
             }
 
         // build response 
-        memcpy(response, &correct, sizeof(int));
-        memcpy(response+4, &wrong_place, sizeof(int));
+        memcpy(response, &wrong_place, sizeof(int));
+        memcpy(response+4, &correct, sizeof(int));
     }
 
     return response;
@@ -222,14 +222,14 @@ int main(int argc, char** argv) {
                         // prompt for username
                         char username[512];
                        memset(username, 0, sizeof(username));
-                        write(new_client_socket, "Welcome to Guess the Word, please enter your username: ", 56);
+                        write(new_client_socket, "Welcome to Guess the Word, please enter your username.", 56);
                         read(new_client_socket, username, sizeof(username) - 1);
                         username[strlen(username) - 1] = '\0';
 
                         // check for valid username
                         while(client[client_index].c_len == 0){
                             if (num_connect > 1 && !handle_user(username, strlen(username), client, 5)) {//invalid username reprompt client
-                                write(new_client_socket, "Username is already taken, please enter a different username: ", 61);
+                                write(new_client_socket, "Username is already taken, please enter a different username", 61);
                                 read(new_client_socket, username, sizeof(username) - 1);
                             } else { // valid username
                                 client[client_index].c_user = strdup(username);
@@ -272,6 +272,7 @@ int main(int argc, char** argv) {
                     
                     char guess_msg [512];
                     bool no_msg = false;
+                    bool correct = false;
                     if(amount == 0 || amount == -1){ // check for disconnect
                         printf("User %s disconnected\n", client[index].c_user);
                         // close connection
@@ -292,10 +293,11 @@ int main(int argc, char** argv) {
                     }
                     else{ // valid guess length
                         guess_pck = handle_guess(message, word, word_len);
-                        if(*guess_pck == strlen(word)){ // correct guess
+                        if(guess_pck[4] == strlen(word)){ // correct guess
                             printf("%s has correctly guessed the word %s\n", client[index].c_user, word);
                             snprintf(guess_msg, sizeof(guess_msg), "%s has correctly guessed the word %s\n", client[index].c_user, word);
                             // pick new word and restart game
+                            correct = true;
                             free(word);
                             t = rand() % file_size;
                             printf("Secret Word: %s\n", dict[t]);
@@ -315,6 +317,14 @@ int main(int argc, char** argv) {
                         for(int j = 0; j < 5; j++){
                             if(client[j].c_sock != -1){
                                 write(client[j].c_sock, guess_msg, strlen(guess_msg));
+                                if(correct){
+                                    FD_CLR(client[j].c_sock, &readfd);
+                                    close(client[j].c_sock);
+                                    client[j].c_sock = -1;
+                                    client[j].c_user = NULL;
+                                    client[j].c_len = 0;
+                                    num_connect--;
+                                }
                             }
                         }
                     }
