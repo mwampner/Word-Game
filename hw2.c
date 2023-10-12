@@ -12,24 +12,15 @@
 
 struct sockaddr_in server_addr;
 
+// struct to store client info
 typedef struct{
     int c_sock;
     char * c_user;
+    int c_len;
 }clients;
 
-// function to get and bind socket
-int get_socket(int port) {
-    int socket_FD = socket(AF_INET, SOCK_STREAM, 0);
-    server_addr.sin_port = htons(port);
-    if (bind(socket_FD, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
-        perror("Unable to bind socket");
-        exit(EXIT_FAILURE);
-    }
-    return socket_FD;
-}
-
 // handle guess
-char * handle_guess(char * g, char * a){
+char * handle_guess(char * g, char * a, int a_len){
     // declare variables
     char * response = malloc(2 * sizeof(int));
     char * answer = malloc(strlen(a));
@@ -41,16 +32,16 @@ char * handle_guess(char * g, char * a){
 
      // Check letters
         // check for correct letter and placement
-        for(int i = 0; i < strlen(answer); i++){
+        for(int i = 0; i < a_len; i++){
             if(guess[i] == answer[i]){
                 correct++;
             }
         }
 
         // check for correct letter and wrong placement
-        for(int i = 0; i < strlen(guess); i++){
+        for(int i = 0; i < a_len; i++){
             if(guess[i] != '0'){
-                for(int j = 0; j < strlen(answer); j++){
+                for(int j = 0; j < a_len; j++){
                     if(answer[j] != '0'){
                         if(guess[i] == answer[j]){
                             answer[j] = '0';
@@ -69,16 +60,18 @@ char * handle_guess(char * g, char * a){
 }
 
 // handle username
-bool handle_user(char * new_user, char ** user_list, int num_users){
+bool handle_user(char * new_user, int new_len, clients * c_list, int num_users){
     // Check if username is being used
-    for(int i = 0; i < num_users; i ++){
-        if(strlen(new_user) == strlen(user_list[i])){
-            for(int j = 0; j < strlen(new_user); j++){
-                if(tolower(new_user[j]) != tolower(user_list[i][j])){
-                    j = strlen(new_user);
-                }
-                if(j == strlen(new_user)-1){
-                    return false;
+    for(int i = 0; i < 5; i ++){
+        if(c_list[i].c_sock != -1){
+            if(new_len == c_list[i].c_len){ // check length
+                for(int j = 0; j < new_len; j++){
+                    if(tolower(new_user[j]) != tolower((c_list[i].c_user)[j])){ // commpare letters
+                        j = new_len;
+                    }
+                    if(j == new_len-1){
+                        return false;
+                    }
                 }
             }
         }
@@ -167,7 +160,6 @@ int main(int argc, char** argv) {
     //int client_sockets[5]; 
     //char * client_users[5]; 
     clients * client = malloc(5 * sizeof(clients));
-    char ** user_list = malloc(5*sizeof(char*));
     for(int i = 0; i < 5; i++){
         client[i].c_sock = -1;
     }
@@ -178,26 +170,13 @@ int main(int argc, char** argv) {
     char * word = malloc(longest * sizeof(char));
     memcpy(word, dict[t], strlen(dict[t]));
     int num_connect = 0;
-
-    //users 
-    char* users[5];
-    for(int i=0; i<5; i++){
-        users[i] = NULL;
-    }
-
+    word[strlen(dict[t])] = '\0';
+    int word_len = strlen(dict[t]);
 
     // start word game
     while (1) {
         ready = readfd;
         
-        // Check for disconnection
-        if(num_connect != 0){
-            for(int i = 0; i < 5; i++){
-                
-            }
-        }
-
-        // Ready for guesses
         // Ready for guesses
         FD_SET(server_socket, &ready);
         for (int i = 0; i < 5; i++) {
@@ -212,7 +191,6 @@ int main(int argc, char** argv) {
             printf("Waiting for guess\n");
         }
         select(FD_SETSIZE, &ready, NULL, NULL, NULL);
-        int newsd;
         for (int i = 0; i < FD_SETSIZE; i++) {
             if (FD_ISSET(i, &ready)) {
              // Check for new connection
@@ -226,7 +204,6 @@ int main(int argc, char** argv) {
                     }
 
                     // Add the new client socket to the set of file descriptors to monitor
-                    //FD_SET(new_client_socket, &readfd);
                     int client_index = -1;
                     
                     //find empty spot in clients struct
@@ -237,30 +214,37 @@ int main(int argc, char** argv) {
                         }
                     }
                     if (client_index != -1) {
+                        //add client
                         num_connect++;
                         client[client_index].c_sock = new_client_socket;
+                        client[client_index].c_len = 0;
 
+                        // prompt for username
                         char username[512];
-                        memset(username, 0, sizeof(username));
+                       memset(username, 0, sizeof(username));
                         write(new_client_socket, "Welcome to Guess the Word, please enter your username: ", 56);
                         read(new_client_socket, username, sizeof(username) - 1);
                         username[strlen(username) - 1] = '\0';
 
-                        if (num_connect > 1 && !handle_user(username, users, 5)) {
-                            write(new_client_socket, "Username is already taken, please enter a different username: ", 61);
-                            close(new_client_socket);
-                            client[client_index].c_sock = -1;
-                        } else {
-                            client[client_index].c_user = strdup(username);
-                            char welcome_message[512];
-                            snprintf(welcome_message, sizeof(welcome_message), "Let's start playing, %s\n", username);
-                            write(new_client_socket, welcome_message, strlen(welcome_message));
-                            printf("User %s added to game\n", username);
-                            char join_msg[512];
-                            snprintf(join_msg, sizeof(join_msg), "There are %d player(s) playing. The secret word is %ld letter(s).\n", num_connect, strlen(word));
-                            write(new_client_socket, join_msg, strlen(join_msg));
+                        // check for valid username
+                        while(client[client_index].c_len == 0){
+                            if (num_connect > 1 && !handle_user(username, strlen(username), client, 5)) {//invalid username reprompt client
+                                write(new_client_socket, "Username is already taken, please enter a different username: ", 61);
+                                read(new_client_socket, username, sizeof(username) - 1);
+                            } else { // valid username
+                                client[client_index].c_user = strdup(username);
+                                client[client_index].c_len = strlen(username);
+                                char welcome_message[512];
+                                snprintf(welcome_message, sizeof(welcome_message), "Let's start playing, %s\n", username);
+                                write(new_client_socket, welcome_message, strlen(welcome_message));
+                                //add user to game
+                                printf("User %s added to game\n", username);
+                                char join_msg[512];
+                                snprintf(join_msg, sizeof(join_msg), "There are %d player(s) playing. The secret word is %d letter(s).\n", num_connect, word_len);
+                                write(new_client_socket, join_msg, strlen(join_msg));
+                            }
                         }
-                    } else {
+                    } else {// reject if 5 players
                         write(new_client_socket, "Server is busy. Please try again later.\n", 40);
                         close(new_client_socket);
                     }
@@ -271,6 +255,7 @@ int main(int argc, char** argv) {
                     int amount = read(i, message, 512);
                     struct sockaddr_in server_addr2;
                     socklen_t len;
+                    // get client information
                     getpeername(i, (struct sockaddr*)&server_addr2, &len);
                     // find user
                     int index;
@@ -280,47 +265,59 @@ int main(int argc, char** argv) {
                             break;
                         }
                     }
-                    // handle guess
+                    // set up guess packet
                     printf("User %s made a guess\n", client[index].c_user);
                     char * guess_pck = malloc(2*sizeof(int));
                     message[strlen(message)-1]='\0';
-                    guess_pck = handle_guess(message, word);
-
                     
-                    if(amount == 0 || amount == -1){ // disconnect
-                        printf(">Server on %d closed\n", ntohs(server_addr2.sin_port));
+                    char guess_msg [512];
+                    bool no_msg = false;
+                    if(amount == 0 || amount == -1){ // check for disconnect
+                        printf("User %s disconnected\n", client[index].c_user);
                         // close connection
                         FD_CLR(i, &readfd);
                         close(i);
                         //remove from clients
+                        num_connect--;
+                        client[index].c_sock = -1;
+                        client[index].c_user = NULL;
+                        client[index].c_len = 0;
+                        no_msg = true;
                     }
-                    else if(strlen(message) != strlen(word)){// // Check for valid guess
+                    else if(strlen(message) != word_len){// Check for valid guess
+                        no_msg = true;
                         printf("Invalid guess length. The secret word is %ld letter(s).\n", strlen(word));
+                        snprintf(guess_msg, sizeof(guess_msg), "Invalid guess length. The secret word is %ld letter(s).\n", strlen(word));
+                        write(client[index].c_sock, guess_msg, strlen(guess_msg));
                     }
-                    else{
+                    else{ // valid guess length
+                        guess_pck = handle_guess(message, word, word_len);
                         if(*guess_pck == strlen(word)){ // correct guess
                             printf("%s has correctly guessed the word %s\n", client[index].c_user, word);
-
+                            snprintf(guess_msg, sizeof(guess_msg), "%s has correctly guessed the word %s\n", client[index].c_user, word);
                             // pick new word and restart game
                             free(word);
                             t = rand() % file_size;
                             printf("Secret Word: %s\n", dict[t]);
                             word = malloc(longest * sizeof(char));
+                            word_len = strlen(dict[t]);
                             memcpy(word, dict[t], strlen(dict[t]));
-                            //snprintf(join_msg, sizeof(join_msg), "There are %d player(s) playing. The secret word is %ld letter(s).\n", num_connect, strlen(word));
+                            word[strlen(dict[t])] = '\0';
                         }
                         else{ // incorrect guess
                             printf("%s guessed %s: %d letter(s) were correct and %d letter(s) were correctly placed.\n", client[index].c_user, message, *guess_pck, (guess_pck[4]));
+                            snprintf(guess_msg, sizeof(guess_msg), "%s guessed %s: %d letter(s) were correct and %d letter(s) were correctly placed.\n", client[index].c_user, message, *guess_pck, (guess_pck[4]));
                         }
                     }    
-                    // print result to other clients/players
-                    /*if (amount == 0 || amount == -1) {
-                        printf(">Server on %d closed\n", ntohs(server_addr2.sin_port));
-                        FD_CLR(i, &readfd);
-                        close(i);
-                    } else {
-                        printf(">%d %s\n", ntohs(server_addr.sin_port), message);
-                    }*/
+
+                    //send guess message to all players if applicable
+                    if(!no_msg){
+                        for(int j = 0; j < 5; j++){
+                            if(client[j].c_sock != -1){
+                                write(client[j].c_sock, guess_msg, strlen(guess_msg));
+                            }
+                        }
+                    }
                 }
             }
         }
