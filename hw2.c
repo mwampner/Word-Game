@@ -120,21 +120,25 @@ int main(int argc, char** argv) {
         fprintf(stderr, "ERROR: File %s not found\n", argv[3]);
         return EXIT_FAILURE;
     }
-    int file_size;
-    fseek(fp, 0, SEEK_END);
-    file_size = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
 
+    // Get number of words
+    char *x = malloc(longest * sizeof(char));
+    int file_size = 0;
+    while (fscanf(fp, "%s\n", x) == 1) {
+        file_size++;
+    }
+    fseek(fp, 0, SEEK_SET);
     // Read in words
     char** dict = malloc(file_size * sizeof(char*));
-
-    char *x = malloc(longest * sizeof(char));
     int y = 0;
     while (fscanf(fp, "%s\n", x) == 1) {
-        dict[y] = malloc(strlen(x));
-        memcpy(dict[y], x, strlen(x));
+        dict[y] = malloc(strlen(x)+1);
+        memcpy(dict[y], x, strlen(x)+1);
+        dict[y][strlen(x)] = '\0';
+        y++;
     }
 
+    // Seed random number
     srand(seed);
 
     // Set up server
@@ -175,7 +179,7 @@ int main(int argc, char** argv) {
 
     // get random word
     int t = rand() % file_size;
-    printf("Word: %s /// Length: %d\n", dict[t], strlen(dict[t]));
+    printf("Secret Word: %s\n", dict[t]);
     char * word = malloc(longest * sizeof(char));
     memcpy(word, dict[t], strlen(dict[t]));
     int num_connect = 0; 
@@ -192,16 +196,32 @@ int main(int argc, char** argv) {
         }
 
         // Ready for guesses
+        // Ready for guesses
+        FD_SET(server_socket, &ready);
+        for (int i = 0; i < 5; i++) {
+            if (client[i].c_sock != -1) {
+                FD_SET(client[i].c_sock, &ready);
+            }
+        }
+        if(num_connect == 0){
+            printf("Waiting for connection\n");
+        }
+        else{
+            printf("Waiting for guess\n");
+        }
         select(FD_SETSIZE, &ready, NULL, NULL, NULL);
         int newsd;
         for (int i = 0; i < FD_SETSIZE; i++) {
+            printf("Connection found\n");
             if (FD_ISSET(i, &ready)) {
+                printf("getting connection\n");
                 // get new connection
                 if (i == STDIN_FILENO) {
+                    printf("setting up connection\n");
                     int newport = 0;
                     scanf("%d", &newport);
                     if (num_connect < 5) {
-
+                        printf("Accepting new connection\n");
                         // Accept client connection
                         struct sockaddr_in remote_client;
                         int addrlen = sizeof( remote_client );
